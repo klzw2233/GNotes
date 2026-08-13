@@ -1,0 +1,34 @@
+# GNotes 容器编排：backend + nginx（前端编进 nginx 镜像）
+services:
+  backend:
+    build: ./backend
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-admin}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL}
+      - DATABASE_PATH=/app/data/notes.db
+      - GOOGLE_DRIVE_CREDENTIALS_FILE=/app/secrets/gdrive.json
+      - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID}
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
+      - BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - db-data:/app/data
+      - ./secrets:/app/secrets:ro
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: ./frontend
+      dockerfile: ../nginx/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db-data:
