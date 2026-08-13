@@ -74,8 +74,28 @@ async function onBackupNow(): Promise<void> {
   }
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null): string {
+  if (!iso) return ''
   return new Date(iso).toLocaleString('zh-CN', { hour12: false })
+}
+
+// 横幅样式：未配置/失败/验证失败 → 警告色；否则正常
+function bannerClass(b: BackupStatus): string {
+  if (!b.configured || b.ok === false || b.verify_status === 'failed') return 'banner-warn'
+  return 'banner-ok'
+}
+
+function verifyLabel(b: BackupStatus): string {
+  switch (b.verify_status) {
+    case 'ok':
+      return '已验证可恢复'
+    case 'failed':
+      return '恢复验证失败（备份可能不可恢复）'
+    case 'skipped':
+      return '恢复验证已跳过'
+    default:
+      return ''
+  }
 }
 
 onMounted(() => {
@@ -97,13 +117,22 @@ onMounted(() => {
     <div
       v-if="auth.isAdmin && backup"
       class="banner"
-      :class="backup.ok === false || !backup.configured ? 'banner-warn' : 'banner-ok'"
+      :class="bannerClass(backup)"
     >
       <div>
         <strong>备份</strong>
         <span class="muted"> — {{ backup.message }}</span>
         <span v-if="backup.finished_at" class="muted">
           （{{ formatDate(backup.finished_at) }}）
+        </span>
+        <span v-if="backup.consecutive_failures > 0" class="warn-text">
+          · 连续失败 {{ backup.consecutive_failures }} 次
+        </span>
+        <span v-if="verifyLabel(backup)" class="muted">
+          · {{ verifyLabel(backup) }}
+        </span>
+        <span v-if="backup.next_run_at" class="muted">
+          · 下次 {{ formatDate(backup.next_run_at) }}
         </span>
       </div>
       <div class="row">

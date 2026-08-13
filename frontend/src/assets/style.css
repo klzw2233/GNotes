@@ -86,6 +86,7 @@ label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 14px
 }
 .banner-warn { background: #fff7ed; border-color: #fdba74; }
 .banner-ok { background: #f0fdf4; border-color: #86efac; }
+.warn-text { color: var(--danger); font-size: 13px; font-weight: 600; }
 
 /* 列表 */
 .note-list { list-style: none; padding: 0; margin: 0; }

@@ -341,8 +341,11 @@ def test_gdrive_upload_retries_on_5xx_then_succeeds(monkeypatch: pytest.MonkeyPa
 
     from app.services.gdrive_client import GDriveClient
 
-    tmp = Path(__file__).parent / "_tmp_upload.bin"
-    tmp.write_bytes(b"x")
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp()
+    import os as _os
+    with _os.fdopen(fd, "wb") as f:
+        f.write(b"x")
     try:
         service = MagicMock()
         attempts = {"n": 0}
@@ -366,12 +369,12 @@ def test_gdrive_upload_retries_on_5xx_then_succeeds(monkeypatch: pytest.MonkeyPa
         client._folder_id = "fid"
         client._service = service
 
-        fid = client.upload_file(str(tmp), "backup_test.db.gz.enc")
+        fid = client.upload_file(tmp_path, "backup_test.db.gz.enc")
         assert fid == "FILEID"
         assert attempts["n"] == 3
     finally:
         try:
-            tmp.unlink()
+            _os.unlink(tmp_path)
         except OSError:
             pass
 
