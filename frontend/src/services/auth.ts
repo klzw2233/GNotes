@@ -25,3 +25,10 @@ export async function logout(): Promise<void> {
     clearToken()
   }
 }
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  await http.post('/auth/change-password', {
+    old_password: oldPassword,
+    new_password: newPassword,
+  })
+}
