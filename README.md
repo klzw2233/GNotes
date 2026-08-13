@@ -2,6 +2,8 @@
 
 自托管、多用户笔记系统。笔记在服务端用 AES-256-GCM 加密后写入 SQLite；可选地将加密备份上传到 Google Drive。
 
+> License: MIT（见 [LICENSE](./LICENSE)）。
+
 无公开注册：首次启动用 `.env` 创建管理员，由管理员再创建普通用户。
 
 ## 能做什么
@@ -173,3 +175,19 @@ npm run build
 - 前端不用 `v-html`；nginx 带 CSP 等安全头
 - 密码 bcrypt，最长 72 字符（与 bcrypt 限制一致）
 - `JWT_SECRET` 启动时至少 32 字符，否则退出
+
+---
+
+## 加密模型（重要）
+
+GNotes 使用 **server-side encryption**（服务端加密），**不是** end-to-end encryption：
+
+```text
+浏览器明文 → HTTPS → FastAPI 接收明文 → 服务端 AES-256-GCM 加密 → SQLite 密文
+```
+
+- 服务器进程持有主密钥（`ENCRYPTION_KEY`），理论上**可以解密笔记内容**。
+- 备份包用独立的 `BACKUP_ENCRYPTION_KEY` 再加密一层，但服务器同样持有该密钥。
+- 因此 GNotes 适合「信任服务器运维者」的自托管场景；若你需要的是「服务器也无法读取笔记」的端到端加密，当前实现**不满足**该威胁模型。
+
+未来可选增加端到端加密模式，但会带来密码恢复、搜索、多设备密钥管理等复杂问题（详见 `TODO_features.md` P3-28）。
