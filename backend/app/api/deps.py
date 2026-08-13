@@ -39,6 +39,11 @@ async def get_current_user(
     user = await user_repo.get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户不存在")
+    # 禁用/软删除即时生效：旧 JWT 在下次请求时即失效（无需等过期）
+    if user.get("is_disabled"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "账户已被禁用")
+    if user.get("deleted_at"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "账户已删除")
     return user
 
 
