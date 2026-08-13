@@ -1,4 +1,4 @@
-"""认证路由：/auth/login、/auth/logout。"""
+"""认证路由：/auth/login、/auth/logout、/auth/change-password。"""
 from __future__ import annotations
 
 import aiosqlite
@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.api.deps import get_current_user, get_db_dep
 from app.core.config import get_settings
 from app.core.rate_limit import login_limiter
-from app.core.security import TOKEN_TTL_DAYS
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.core.security import TOKEN_TTL_DAYS, hash_password, verify_password
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse
 from app.schemas.common import ok
 from app.services.auth_service import login as do_login
+from app.repositories import user_repo
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -54,3 +55,19 @@ async def login(
 async def logout(_user: dict = Depends(get_current_user)) -> dict:
     """软登出：后端无状态，仅返 200。客户端负责清 token。"""
     return ok(message="已登出")
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    user: dict = Depends(get_current_user),
+    db: aiosqlite.Connection = Depends(get_db_dep),
+) -> dict:
+    """用户修改自己密码：验证旧密码 → 更新 hash。
+
+    旧 JWT 仍有效（未实现 token 版本号）；建议被改密用户重新登录。
+    """
+    if not verify_password(body.old_password, user["password_hash"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "旧密码错误")
+    await user_repo.update_password(db, user["id"], hash_password(body.new_password))
+    return ok(message="密码已修改")
