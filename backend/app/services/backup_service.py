@@ -21,6 +21,68 @@ logger = logging.getLogger(__name__)
 # 备份任务并发锁：防止手动与定时并发执行
 _backup_lock = asyncio.Lock()
 
+# 最近一次备份结果（进程内，供 UI 查询；容器重启后清空）
+_last_status: dict = {
+    "configured": False,
+    "ok": None,
+    "message": "尚未执行过备份",
+    "filename": None,
+    "size_bytes": None,
+    "drive_file_id": None,
+    "finished_at": None,
+}
+
+
+def _public_error_message(exc: BaseException) -> str:
+    """给前端看的短错误，不回传内部路径或 SDK 堆栈。"""
+    settings = get_settings()
+    if not settings.google_drive_folder_id:
+        return "未配置 Google Drive（GOOGLE_DRIVE_FOLDER_ID 为空），备份已跳过上传"
+    cred = Path(settings.google_drive_credentials_file)
+    if not cred.is_file():
+        return "未找到 Google Drive 凭证文件，请将服务账号 JSON 放到 secrets/gdrive.json"
+    text = str(exc)
+    lowered = text.lower()
+    if "folder" in lowered or "file not found" in lowered or "404" in lowered:
+        return "无法访问 Google Drive 文件夹，请确认已分享给服务账号"
+    if "credential" in lowered or "auth" in lowered or "403" in lowered:
+        return "Google Drive 认证失败，请检查服务账号 JSON"
+    return "备份失败，请查看服务器日志"
+
+
+def get_backup_status() -> dict:
+    """当前配置是否齐全 + 最近一次备份结果。"""
+    settings = get_settings()
+    cred = Path(settings.google_drive_credentials_file)
+    configured = bool(settings.google_drive_folder_id) and cred.is_file()
+    return {**_last_status, "configured": configured}
+
+
+def _record_success(result: dict) -> None:
+    _last_status.update(
+        {
+            "ok": True,
+            "message": "备份已上传到 Google Drive",
+            "filename": result.get("filename"),
+            "size_bytes": result.get("size_bytes"),
+            "drive_file_id": result.get("drive_file_id"),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+def _record_failure(message: str) -> None:
+    _last_status.update(
+        {
+            "ok": False,
+            "message": message,
+            "filename": None,
+            "size_bytes": None,
+            "drive_file_id": None,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S_UTC")
@@ -67,9 +129,9 @@ def _do_backup_sync() -> dict:
         enc_path.write_bytes(enc_blob)
         logger.info("已加密备份包: %s (%d bytes)", enc_name, len(enc_blob))
 
-        # 4. 上传 Google Drive
+        # 4. 上传 Google Drive（缺 folder_id 时明确失败，不打挂进程）
         if not settings.google_drive_folder_id:
-            raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID 未配置，无法上传备份")
+            raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID 未配置")
 
         client = GDriveClient(
             settings.google_drive_credentials_file,
@@ -103,6 +165,14 @@ def _apply_retention(client: GDriveClient, retention_count: int) -> None:
 
 
 async def run_backup() -> dict:
-    """异步入口：阻塞操作放线程池，避免卡事件循环。"""
+    """异步入口：阻塞操作放线程池。失败记录状态后抛出，由调用方决定是否上浮。"""
     async with _backup_lock:
-        return await asyncio.to_thread(_do_backup_sync)
+        try:
+            result = await asyncio.to_thread(_do_backup_sync)
+        except Exception as exc:
+            message = _public_error_message(exc)
+            logger.exception("备份失败: %s", message)
+            _record_failure(message)
+            raise
+        _record_success(result)
+        return result

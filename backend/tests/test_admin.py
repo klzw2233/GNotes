@@ -120,3 +120,29 @@ async def test_unauthenticated_admin_blocked(client: AsyncClient) -> None:
         json={"username": "x", "email": "x@e.com", "password": "pass-123"},
     )
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_backup_status_and_manual_failure_does_not_500_stack(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """未配置 Drive 时：查询状态可用；手动备份返回 500 但不冒内部细节。"""
+    monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "")
+    from app.core import config as config_mod
+    config_mod.get_settings.cache_clear()
+
+    admin_token = await _login(client, "admin", "admin-pass-123")
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    status = await client.get("/api/v1/admin/backup", headers=headers)
+    assert status.status_code == 200
+    data = status.json()["data"]
+    assert data["configured"] is False
+
+    r = await client.post("/api/v1/admin/backup", headers=headers)
+    assert r.status_code == 500
+    assert r.json()["detail"] == "备份失败"
+
+    after = (await client.get("/api/v1/admin/backup", headers=headers)).json()["data"]
+    assert after["ok"] is False
+    assert "Google Drive" in after["message"]

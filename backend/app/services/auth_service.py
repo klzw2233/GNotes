@@ -12,14 +12,14 @@ from app.repositories import user_repo
 logger = logging.getLogger(__name__)
 
 
-async def login(db: aiosqlite.Connection, username: str, password: str) -> str | None:
-    """登录成功返回 JWT，失败返回 None。"""
+async def login(db: aiosqlite.Connection, username: str, password: str) -> tuple[str, str] | None:
+    """登录成功返回 (JWT, role)，失败返回 None。"""
     user = await user_repo.get_user_by_username(db, username)
     if not user:
         return None
     if not verify_password(password, user["password_hash"]):
         return None
-    return create_access_token(user["id"], user["role"])
+    return create_access_token(user["id"], user["role"]), user["role"]
 
 
 async def bootstrap_admin(db: aiosqlite.Connection) -> None:

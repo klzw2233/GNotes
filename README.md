@@ -1,15 +1,18 @@
 # GNotes
 
-自托管、多用户、服务端加密的笔记系统，支持 Google Drive 自动备份加密数据库。
+自托管、多用户笔记系统。笔记在服务端用 AES-256-GCM 加密后写入 SQLite；可选地将加密备份上传到 Google Drive。
 
-## 特性
+无公开注册：首次启动用 `.env` 创建管理员，由管理员再创建普通用户。
 
-- **服务端 AES-256-GCM 加密**：笔记标题与正文均加密存储，每篇笔记各字段独立 nonce + AAD 绑定（防剪贴攻击）
-- **多用户隔离**：管理员创建用户，用户数据完全隔离
-- **SQLite 存储**：单文件、零配置
-- **Google Drive 备份**：`快照 → gzip → AES-GCM 整体加密 → 上传`，双层加密保护
-- **Docker 一键部署**：backend + nginx 两容器
-- **Vue 3 前端**：极简自定义 CSS，纯 textarea 编辑器
+## 能做什么
+
+- 管理员创建用户；用户登录后管理自己的笔记（列表 / 新建 / 编辑 / 删除）
+- 标题与正文分别加密存储，各用独立 nonce，并用 `note_id:user_id` 作 AAD
+- Docker Compose 两个容器：`backend`（FastAPI）+ `nginx`（前端静态 + `/api` 反代）
+- Google Drive 备份是**可选**的：不配也能用笔记功能。定时/手动备份失败只记日志并在管理员页面提示，**不会让容器退出**
+- 管理员登录后，笔记列表顶部可看到备份状态，并可点「立即备份」
+
+不做（MVP 后置）：公开注册、全文搜索、Markdown 渲染、独立管理后台。
 
 ## 技术栈
 
@@ -17,135 +20,156 @@
 | :--- | :--- |
 | 前端 | Vue 3 + Vite + TypeScript + Pinia + Vue Router |
 | 后端 | Python FastAPI + aiosqlite + APScheduler |
-| 加密 | AES-256-GCM（cryptography 库）+ bcrypt（密码哈希）+ JWT |
-| 备份 | SQLite VACUUM INTO + gzip + google-api-python-client |
-| 部署 | Docker + Docker Compose + nginx |
+| 加密 | AES-256-GCM（cryptography）+ bcrypt + JWT（HS256，7 天） |
+| 备份 | `VACUUM INTO` → gzip → AES-GCM 整包加密 → Drive（可选） |
+| 部署 | Docker Compose；nginx 只监听 HTTP :80 |
 
-## 部署步骤
+## 仓库结构
 
-### 1. 生成密钥
-
-```bash
-# JWT 密钥（≥32 字节）
-python -c "import secrets;print(secrets.token_urlsafe(48))"
-
-# AES 主密钥 + 备份密钥（Base64 编码 32 字节，建议各自独立）
-python -c "import secrets,base64;print(base64.b64encode(secrets.token_bytes(32)).decode())"
+```text
+GNotes/
+├── backend/                 # FastAPI
+│   ├── app/                 # 路由 / 加密 / 认证 / 备份
+│   ├── tests/
+│   ├── requirements.txt     # 生产依赖
+│   └── requirements-dev.txt # 含 pytest
+├── frontend/                # Vue 3（构建进 nginx 镜像）
+├── nginx/
+├── docker-compose.yml
+├── .env.example
+├── 部署文档.md              # Ubuntu / 虚拟机逐步部署
+└── README.md
 ```
 
-### 2. 配置环境变量
+---
+
+## 部署（精简）
+
+完整步骤、虚拟机注意点和排错见 **[部署文档.md](./部署文档.md)**。
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入上面生成的密钥、初始管理员、Drive 配置
-```
+# 填写 JWT_SECRET（≥32 字符）、ENCRYPTION_KEY、BACKUP_ENCRYPTION_KEY、
+# INITIAL_ADMIN_USERNAME / PASSWORD / EMAIL
+# Google Drive 相关可先空着
 
-### 3. 配置 Google Drive
-
-1. 在 [Google Cloud Console](https://console.cloud.google.com/) 创建项目，启用 Drive API
-2. 创建**服务账号**，下载 JSON 密钥，保存为 `secrets/gdrive.json`
-3. 在 Google Drive 创建一个文件夹，**分享**给服务账号邮箱（Editor 权限）
-4. 把文件夹 ID（URL 里 `folders/` 后的部分）填入 `.env` 的 `GOOGLE_DRIVE_FOLDER_ID`
-
-### 4. 启动
-
-```bash
+mkdir -p secrets
 docker compose up -d --build
 ```
 
-首次启动会自动用 `.env` 里的凭据创建初始管理员。
-
-本 compose 只暴露 **HTTP :80**。公网部署请在前面加一层 TLS 终结（Cloudflare / Caddy / 主机 nginx），不要把未加密的 80 端口直接对公网。backend 容器的 8000 端口不映射到宿主机，只允许 nginx 反代访问。
-
-**不要给 uvicorn 开多 worker**（`--workers N`）。定时备份跑在 FastAPI 进程内，多 worker 会启动多个调度器、备份跑两遍。
-
-## API 示例
+密钥生成：
 
 ```bash
-# 管理员登录
-curl -X POST http://localhost/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<初始密码>"}'
-# → {"code":0,"message":"success","data":{"token":"...","token_type":"bearer","expires_in":604800}}
-
-# 管理员创建普通用户
-curl -X POST http://localhost/api/v1/admin/users \
-  -H "Authorization: Bearer <admin_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"alice","email":"alice@example.com","password":"alice-pass"}'
-
-# 普通用户登录后创建笔记
-curl -X POST http://localhost/api/v1/notes \
-  -H "Authorization: Bearer <user_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"我的笔记","content":"内容"}'
-
-# 手动触发备份（管理员）
-curl -X POST http://localhost/api/v1/admin/backup \
-  -H "Authorization: Bearer <admin_token>"
-# → {"code":0,"data":{"filename":"backup_..._UTC.db.gz.enc","size_bytes":...,"drive_file_id":"..."}}
+python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
 ```
 
-## API 端点
+要点：
+
+- compose **只暴露 HTTP :80**。公网请在前面加 TLS，不要把 80 直接对互联网。
+- backend 的 8000 **不映射**到宿主机。
+- **不要**给 uvicorn 开 `--workers N`（定时备份在进程内，多 worker 会跑多份）。
+- **不要** `docker compose down -v`（会删掉 SQLite 数据卷）。
+- `INITIAL_ADMIN_*` 只在 users 表为空时生效。
+- 生产默认 `DEBUG=false`，`/docs` `/redoc` `/openapi.json` 关闭。
+
+未配置 Drive 时：应用可正常登录写笔记；管理员页面会提示未配置；`POST /admin/backup` 返回 500 且记下失败原因，容器继续运行。
+
+---
+
+## 使用
+
+浏览器打开 `http://<主机>/`，用初始管理员登录。
+
+- 普通用户：列表、新建、编辑、删除、登出
+- 管理员额外：顶部备份横幅（配置是否齐全、最近一次成功/失败）、立即备份
+
+创建其他用户目前用 API（无管理后台 UI）：
+
+```bash
+curl -s -X POST http://localhost/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<初始密码>"}'
+# data.token、data.role
+
+curl -s -X POST http://localhost/api/v1/admin/users \
+  -H 'Authorization: Bearer <admin_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"alice","email":"alice@example.com","password":"alice-pass"}'
+```
+
+---
+
+## API
+
+统一成功包装：`{"code":0,"message":"...","data":...}`。业务错误多为 HTTP 4xx/5xx（登录失败为 **401**，不是 200 + code）。
 
 | 方法 | 路径 | 认证 | 说明 |
 | :--- | :--- | :--- | :--- |
-| POST | `/api/v1/auth/login` | 否 | 登录获取 JWT |
+| GET | `/health` | 否 | 存活检查 |
+| POST | `/api/v1/auth/login` | 否 | 返回 `token`、`role`、`expires_in` |
 | POST | `/api/v1/auth/logout` | 是 | 软登出 |
-| POST | `/api/v1/admin/users` | admin | 创建用户 |
-| POST | `/api/v1/admin/backup` | admin | 手动备份 |
-| GET | `/api/v1/notes` | 是 | 笔记列表（仅标题） |
-| GET | `/api/v1/notes/{id}` | 是 | 笔记详情 |
-| POST | `/api/v1/notes` | 是 | 创建笔记 |
-| PUT | `/api/v1/notes/{id}` | 是 | 更新笔记 |
-| DELETE | `/api/v1/notes/{id}` | 是 | 删除笔记 |
+| POST | `/api/v1/admin/users` | admin | 创建普通用户 |
+| GET | `/api/v1/admin/backup` | admin | 备份配置 + 最近一次结果 |
+| POST | `/api/v1/admin/backup` | admin | 立即备份 |
+| GET | `/api/v1/notes` | 是 | 列表（仅标题明文） |
+| GET | `/api/v1/notes/{id}` | 是 | 详情 |
+| POST | `/api/v1/notes` | 是 | 创建 |
+| PUT | `/api/v1/notes/{id}` | 是 | 更新 |
+| DELETE | `/api/v1/notes/{id}` | 是 | 删除 |
 
-## 备份恢复
+登录失败按 IP 限流（默认 10 次 / 5 分钟，超限 429）；nginx 对登录另有 `limit_req`。
 
-备份文件在 Drive 上为 `.db.gz.enc` 加密包。恢复流程：
+---
+
+## Google Drive 备份（可选）
+
+链路：`VACUUM INTO` 一致性快照 → gzip → AES-256-GCM 整包加密 → 上传。Drive 上文件名为 `backup_<UTC时间>.db.gz.enc`。
+
+配置步骤见 [部署文档.md](./部署文档.md) 第 6 节。需要：`secrets/gdrive.json`、把 Drive 文件夹分享给服务账号、`.env` 里的 `GOOGLE_DRIVE_FOLDER_ID`。
+
+定时默认 `BACKUP_SCHEDULE=0 2 * * *`（UTC）。保留份数 `BACKUP_RETENTION_COUNT`（默认 30）。
+
+从 `.enc` 恢复：
 
 ```bash
-# 1. 从 Drive 下载 backup_YYYY-MM-DD_HHMMSS_UTC.db.gz.enc
-
-# 2. 解密 → 解压 → 得到 SQLite 快照
-python -c "
-import base64, gzip, sys
+python3 -c "
+import base64, gzip
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 key = base64.b64decode('<BACKUP_ENCRYPTION_KEY>')
 blob = open('backup_xxx.db.gz.enc','rb').read()
 dec = AESGCM(key).decrypt(blob[:12], blob[12:], None)
 open('restored.db','wb').write(gzip.decompress(dec))
-print('已还原为 restored.db')
 "
-
-# 3. 停服后用 restored.db 替换 notes.db，重启容器
+# 停 backend，替换数据卷中的 notes.db 后再启动
 ```
 
-## 开发
+---
+
+## 本地开发
 
 ```bash
 # 后端
 cd backend
 pip install -r requirements-dev.txt
-export JWT_SECRET=... ENCRYPTION_KEY=... INITIAL_ADMIN_PASSWORD=... INITIAL_ADMIN_EMAIL=... DATABASE_PATH=./notes.db
-pytest            # 运行测试
-uvicorn app.main:app --reload   # 本地运行（需要 DEBUG=true 才开放 /docs）
+# 设置 JWT_SECRET、ENCRYPTION_KEY、INITIAL_ADMIN_*、DATABASE_PATH
+pytest
+uvicorn app.main:app --reload    # DEBUG=true 才开放 /docs
 
-# 前端
+# 前端（Vite 把 /api 代理到 127.0.0.1:8000）
 cd frontend
 npm install
-npm run dev       # 开发服务器（自动代理 /api 到 127.0.0.1:8000）
-npm run build     # 生产构建
+npm run dev
+npm run build
 ```
 
-## 安全说明
+---
 
-- 笔记内容服务端 AES-256-GCM 加密，密钥走环境变量、不落盘
-- 数据库仅存密文，标题/正文各有独立 nonce（绝不复用）
-- 备份包双层加密（数据库内密文 + 整体再加密）
-- 公网请在 nginx 前面终结 TLS（本 compose 只提供 HTTP :80）
-- 前端全程禁用 `v-html`，nginx 配置 CSP 头
-- JWT 7 天过期，密码 bcrypt 哈希（最长 72 字符）
-- `JWT_SECRET` 启动时校验至少 32 字符，不够则 fail-fast
-- 生产默认关闭 `/docs` `/redoc` `/openapi.json`（`DEBUG=true` 才开放）
-- 登录按 IP 限流（后端进程内 + nginx `limit_req`）
+## 安全
+
+- 密钥只走环境变量；`.env`、`secrets/`、`*.db` 已在 `.gitignore`
+- 库中无笔记明文；标题/正文 nonce 独立，禁止复用
+- 备份包再加密一层；未配 Drive 时失败不拖垮进程
+- 前端不用 `v-html`；nginx 带 CSP 等安全头
+- 密码 bcrypt，最长 72 字符（与 bcrypt 限制一致）
+- `JWT_SECRET` 启动时至少 32 字符，否则退出

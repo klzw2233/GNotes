@@ -100,6 +100,7 @@ async def test_admin_bootstrap_creates_admin(client: AsyncClient) -> None:
     assert body["data"]["token"]
     assert body["data"]["token_type"] == "bearer"
     assert body["data"]["expires_in"] == 7 * 86400
+    assert body["data"]["role"] == "admin"
 
 
 @pytest.mark.asyncio

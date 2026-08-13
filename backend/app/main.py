@@ -30,7 +30,8 @@ async def _scheduled_backup() -> None:
         result = await run_backup()
         logger.info("定时备份完成: %s", result.get("filename"))
     except Exception:
-        logger.exception("定时备份失败")
+        # 状态已在 run_backup 里记录；此处只保证调度器不被异常打死
+        logger.error("定时备份未成功（容器继续运行）")
 
 
 @asynccontextmanager

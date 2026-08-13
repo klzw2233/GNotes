@@ -34,14 +34,18 @@ async def login(
     if login_limiter.is_blocked(key, settings.login_max_attempts, settings.login_window_seconds):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "登录尝试过多，请稍后再试")
 
-    token = await do_login(db, body.username, body.password)
-    if not token:
+    result = await do_login(db, body.username, body.password)
+    if not result:
         login_limiter.record_failure(key, settings.login_window_seconds)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户名或密码错误")
+    token, role = result
     login_limiter.reset(key)
     return ok(
         TokenResponse(
-            token=token, token_type="bearer", expires_in=TOKEN_TTL_DAYS * 86400
+            token=token,
+            token_type="bearer",
+            expires_in=TOKEN_TTL_DAYS * 86400,
+            role=role,
         ).model_dump()
     )
 

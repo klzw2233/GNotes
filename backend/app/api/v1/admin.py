@@ -11,7 +11,7 @@ from app.core.security import hash_password
 from app.repositories import user_repo
 from app.schemas.auth import UserCreate
 from app.schemas.common import ok
-from app.services.backup_service import run_backup
+from app.services.backup_service import get_backup_status, run_backup
 
 logger = logging.getLogger(__name__)
 
@@ -51,3 +51,9 @@ async def trigger_backup(_admin: dict = Depends(require_admin)) -> dict:
         logger.exception("手动备份失败")
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "备份失败")
     return ok(result, message="备份完成")
+
+
+@router.get("/backup")
+async def backup_status(_admin: dict = Depends(require_admin)) -> dict:
+    """查询备份配置是否齐全，以及最近一次备份结果。"""
+    return ok(get_backup_status())

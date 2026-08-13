@@ -4,6 +4,7 @@ export interface LoginResult {
   token: string
   token_type: string
   expires_in: number
+  role: string
 }
 
 export async function login(username: string, password: string): Promise<LoginResult> {

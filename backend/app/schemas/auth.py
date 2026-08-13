@@ -13,6 +13,7 @@ class TokenResponse(BaseModel):
     token: str
     token_type: str = "bearer"
     expires_in: int  # 秒
+    role: str
 
 
 class UserCreate(BaseModel):

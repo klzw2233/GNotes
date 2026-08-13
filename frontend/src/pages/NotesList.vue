@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { listNotes, deleteNote, type NoteListItem } from '../services/notes'
+import { getBackupStatus, triggerBackup, type BackupStatus } from '../services/backup'
 import { useAuthStore } from '../stores/auth'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
@@ -11,6 +12,9 @@ const auth = useAuthStore()
 const notes = ref<NoteListItem[]>([])
 const loading = ref(false)
 const error = ref('')
+const backup = ref<BackupStatus | null>(null)
+const backupBusy = ref(false)
+const backupActionMsg = ref('')
 
 // 删除确认
 const showConfirm = ref(false)
@@ -47,11 +51,37 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
+async function loadBackup(): Promise<void> {
+  if (!auth.isAdmin) return
+  try {
+    backup.value = await getBackupStatus()
+  } catch {
+    backup.value = null
+  }
+}
+
+async function onBackupNow(): Promise<void> {
+  backupBusy.value = true
+  backupActionMsg.value = ''
+  try {
+    await triggerBackup()
+    backupActionMsg.value = '备份已上传'
+  } catch (e) {
+    backupActionMsg.value = (e as Error).message || '备份失败'
+  } finally {
+    backupBusy.value = false
+    await loadBackup()
+  }
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', { hour12: false })
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadBackup()
+})
 </script>
 
 <template>
@@ -62,6 +92,26 @@ onMounted(load)
       <span class="muted">{{ auth.username || '已登录' }}</span>
       <button @click="auth.logout().then(() => router.push({ name: 'login' }))">登出</button>
       <button class="primary" @click="router.push({ name: 'new' })">新建</button>
+    </div>
+
+    <div
+      v-if="auth.isAdmin && backup"
+      class="banner"
+      :class="backup.ok === false || !backup.configured ? 'banner-warn' : 'banner-ok'"
+    >
+      <div>
+        <strong>备份</strong>
+        <span class="muted"> — {{ backup.message }}</span>
+        <span v-if="backup.finished_at" class="muted">
+          （{{ formatDate(backup.finished_at) }}）
+        </span>
+      </div>
+      <div class="row">
+        <span v-if="backupActionMsg" class="muted">{{ backupActionMsg }}</span>
+        <button :disabled="backupBusy" @click="onBackupNow">
+          {{ backupBusy ? '备份中…' : '立即备份' }}
+        </button>
+      </div>
     </div>
 
     <p v-if="loading" class="muted">加载中…</p>
