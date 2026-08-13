@@ -25,7 +25,10 @@ async def login(db: aiosqlite.Connection, username: str, password: str) -> tuple
     if not verify_password(password, user["password_hash"]):
         return None
     await user_repo.update_last_login(db, user["id"])
-    return create_access_token(user["id"], user["role"]), user["role"]
+    return (
+        create_access_token(user["id"], user["role"], user.get("token_version", 0)),
+        user["role"],
+    )
 
 
 async def bootstrap_admin(db: aiosqlite.Connection) -> None:

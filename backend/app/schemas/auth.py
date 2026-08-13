@@ -57,3 +57,9 @@ class ChangePasswordRequest(BaseModel):
     """用户修改自己密码入参。"""
     old_password: str = Field(min_length=1, max_length=128)
     new_password: str = Field(min_length=6, max_length=72)
+
+
+class ChangePasswordResponse(BaseModel):
+    """改密成功响应：返回用新 token_version 签发的新 token，前端替换后无需重登。"""
+    token: str
+    expires_in: int

@@ -44,6 +44,10 @@ async def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "账户已被禁用")
     if user.get("deleted_at"):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "账户已删除")
+    # token 版本号比对：改密/重置密码后旧 JWT 失效（payload.get 兼容无 ver 的旧 token → 0）
+    token_ver = payload.get("ver", 0)
+    if token_ver != user.get("token_version", 0):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "令牌已失效，请重新登录")
     return user
 
 

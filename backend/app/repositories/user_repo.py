@@ -145,6 +145,16 @@ async def update_password(db: aiosqlite.Connection, user_id: str, password_hash:
     return cur.rowcount
 
 
+async def bump_token_version(db: aiosqlite.Connection, user_id: str) -> None:
+    """token 版本号 +1，使该用户所有旧 JWT 立即失效（改密/重置密码时调用）。"""
+    await db.execute(
+        "UPDATE users SET token_version = token_version + 1, updated_at = ? "
+        "WHERE id = ? AND deleted_at IS NULL",
+        (_now_iso(), user_id),
+    )
+    await db.commit()
+
+
 async def update_last_login(db: aiosqlite.Connection, user_id: str) -> None:
     """登录成功后更新 last_login_at。"""
     await db.execute(

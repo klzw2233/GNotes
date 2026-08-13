@@ -33,13 +33,18 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 # ---------- JWT ----------
 
-def create_access_token(user_id: str, role: str) -> str:
-    """签发 JWT，payload 含 sub/role/iat/exp。"""
+def create_access_token(user_id: str, role: str, token_version: int = 0) -> str:
+    """签发 JWT，payload 含 sub/role/iat/exp/ver。
+
+    token_version 写入 ver，改密/重置密码时 +1；get_current_user 比对
+    payload.ver 与 user.token_version，不等则令牌已失效。
+    """
     settings = get_settings()
     now = dt.datetime.now(dt.timezone.utc)
     payload: dict[str, Any] = {
         "sub": user_id,
         "role": role,
+        "ver": token_version,
         "iat": int(now.timestamp()),
         "exp": int((now + dt.timedelta(days=TOKEN_TTL_DAYS)).timestamp()),
     }

@@ -297,3 +297,97 @@ async def test_unauthenticated_blocked(client: AsyncClient) -> None:
     assert (await client.get("/api/v1/admin/users")).status_code == 401
     assert (await client.post("/api/v1/auth/change-password",
              json={"old_password": "x", "new_password": "y"})).status_code == 401
+
+
+# ---------- token_version：改密/重置后旧 JWT 失效 ----------
+
+@pytest.mark.asyncio
+async def test_change_password_invalidates_old_token(client: AsyncClient) -> None:
+    """改密后旧 token 立即失效（401），改密返回的新 token 可用。"""
+    admin_token = await _login(client, "admin", "admin-pass-123")
+    h = {"Authorization": f"Bearer {admin_token}"}
+    # 旧 token 当前可用
+    assert (await client.get("/api/v1/notes", headers=h)).status_code == 200
+
+    r = await client.post(
+        "/api/v1/auth/change-password",
+        json={"old_password": "admin-pass-123", "new_password": "new-pass-123456"},
+        headers=h,
+    )
+    assert r.json()["code"] == 0
+    new_token = r.json()["data"]["token"]
+    assert new_token != admin_token
+
+    # 旧 token 已失效
+    assert (await client.get("/api/v1/notes", headers=h)).status_code == 401
+    assert "失效" in (await client.get("/api/v1/notes", headers=h)).json()["detail"]
+    # 新 token 可用
+    new_h = {"Authorization": f"Bearer {new_token}"}
+    assert (await client.get("/api/v1/notes", headers=new_h)).status_code == 200
+    # 新密码能登录
+    assert (await _login(client, "admin", "new-pass-123456"))
+
+
+@pytest.mark.asyncio
+async def test_reset_password_invalidates_old_token(client: AsyncClient) -> None:
+    """管理员重置密码后，被重置用户的旧 token 立即失效。"""
+    admin_token = await _login(client, "admin", "admin-pass-123")
+    uid = await _create_user(client, admin_token, "alice")
+    alice_token = await _login(client, "alice", "pass-123456")
+    alice_h = {"Authorization": f"Bearer {alice_token}"}
+    assert (await client.get("/api/v1/notes", headers=alice_h)).status_code == 200
+
+    # admin 重置 alice 密码
+    r = await client.post(
+        f"/api/v1/admin/users/{uid}/reset-password",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    temp_pw = r.json()["data"]["temporary_password"]
+
+    # alice 旧 token 失效
+    assert (await client.get("/api/v1/notes", headers=alice_h)).status_code == 401
+    # 临时密码可登录
+    assert (await _login(client, "alice", temp_pw))
+
+
+@pytest.mark.asyncio
+async def test_token_survives_other_user_password_change(client: AsyncClient) -> None:
+    """A 改密不影响 B 的 token（version 是 per-user 的）。"""
+    admin_token = await _login(client, "admin", "admin-pass-123")
+    await _create_user(client, admin_token, "alice")
+    await _create_user(client, admin_token, "bob")
+    alice_token = await _login(client, "alice", "pass-123456")
+    bob_token = await _login(client, "bob", "pass-123456")
+
+    # alice 改密
+    await client.post(
+        "/api/v1/auth/change-password",
+        json={"old_password": "pass-123456", "new_password": "alice-new-123"},
+        headers={"Authorization": f"Bearer {alice_token}"},
+    )
+    # bob 的 token 仍有效
+    assert (await client.get("/api/v1/notes", headers={"Authorization": f"Bearer {bob_token}"})).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_old_token_without_ver_still_valid_before_password_change(
+    client: AsyncClient,
+) -> None:
+    """平滑迁移：升级后未改密前，旧逻辑签发的 token（若有）仍可用。
+
+    这里用直接签发一个带 ver=0 的 token 模拟，验证 user.token_version=0 时
+    ver=0 的 token 通过比对。改密后 ver 需 +1 才失效。
+    """
+    from app.core.security import create_access_token
+    admin_token = await _login(client, "admin", "admin-pass-123")  # 带 ver=0
+    h = {"Authorization": f"Bearer {admin_token}"}
+    # 未改密，token 有效
+    assert (await client.get("/api/v1/notes", headers=h)).status_code == 200
+    # 手动签一个 ver=0 的 token（模拟旧 token），也应通过（user.token_version=0）
+    admin_id = (
+        await client.get("/api/v1/admin/users", headers=h)
+    ).json()["data"]["items"][0]["id"]
+    legacy_token = create_access_token(admin_id, "admin", 0)
+    assert (
+        await client.get("/api/v1/notes", headers={"Authorization": f"Bearer {legacy_token}"})
+    ).status_code == 200

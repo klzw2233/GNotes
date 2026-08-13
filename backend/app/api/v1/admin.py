@@ -146,6 +146,8 @@ async def reset_password(
     )
     if affected == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
+    # bump token_version：重置密码即撤销该用户所有旧会话（旧 JWT 立即失效）
+    await user_repo.bump_token_version(db, user_id)
     logger.info("管理员 %s 重置了用户 %s 的密码", admin["id"], user_id)
     return ok(ResetPasswordResponse(temporary_password=temporary_password).model_dump(),
               message="密码已重置，请将临时密码安全转交用户")

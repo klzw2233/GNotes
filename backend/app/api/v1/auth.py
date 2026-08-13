@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.api.deps import get_current_user, get_db_dep
 from app.core.config import get_settings
 from app.core.rate_limit import login_limiter
-from app.core.security import TOKEN_TTL_DAYS, hash_password, verify_password
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse
+from app.core.security import TOKEN_TTL_DAYS, create_access_token, hash_password, verify_password
+from app.schemas.auth import ChangePasswordRequest, ChangePasswordResponse, LoginRequest, TokenResponse
 from app.schemas.common import ok
 from app.services.auth_service import login as do_login
 from app.repositories import user_repo
@@ -63,11 +63,18 @@ async def change_password(
     user: dict = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db_dep),
 ) -> dict:
-    """用户修改自己密码：验证旧密码 → 更新 hash。
+    """用户修改自己密码：验证旧密码 → 更新 hash + token_version +1 → 返回新 token。
 
-    旧 JWT 仍有效（未实现 token 版本号）；建议被改密用户重新登录。
+    bump version 使该用户其他设备的旧 token 失效；返回用新 ver 签发的新 token，
+    前端替换后当前会话继续可用，无需重新登录。
     """
     if not verify_password(body.old_password, user["password_hash"]):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "旧密码错误")
     await user_repo.update_password(db, user["id"], hash_password(body.new_password))
-    return ok(message="密码已修改")
+    await user_repo.bump_token_version(db, user["id"])
+    new_version = user.get("token_version", 0) + 1
+    new_token = create_access_token(user["id"], user["role"], new_version)
+    return ok(
+        ChangePasswordResponse(token=new_token, expires_in=TOKEN_TTL_DAYS * 86400).model_dump(),
+        message="密码已修改",
+    )

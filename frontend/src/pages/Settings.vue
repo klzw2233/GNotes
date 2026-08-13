@@ -26,7 +26,7 @@ async function onSubmit(): Promise<void> {
   loading.value = true
   try {
     await changePassword(oldPassword.value, newPassword.value)
-    success.value = '密码已修改'
+    success.value = '密码已修改，已自动续登'
     oldPassword.value = ''
     newPassword.value = ''
     confirm.value = ''
