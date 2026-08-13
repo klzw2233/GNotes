@@ -26,9 +26,16 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
-  await http.post('/auth/change-password', {
-    old_password: oldPassword,
-    new_password: newPassword,
-  })
+export async function changePassword(oldPassword: string, newPassword: string): Promise<string> {
+  const resp = await http.post<ApiResponse<{ token: string; expires_in: number }>>(
+    '/auth/change-password',
+    {
+      old_password: oldPassword,
+      new_password: newPassword,
+    },
+  )
+  // 改密后旧 token 已失效（token_version +1），用接口返回的新 token 续登
+  const newToken = resp.data.data.token
+  setToken(newToken)
+  return newToken
 }
