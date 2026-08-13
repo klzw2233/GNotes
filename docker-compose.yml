@@ -14,11 +14,21 @@ services:
       - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID}
       - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
       - BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT:-30}
+      - BACKUP_RETRY_ATTEMPTS=${BACKUP_RETRY_ATTEMPTS:-3}
+      - BACKUP_VERIFY_ENABLED=${BACKUP_VERIFY_ENABLED:-true}
+      - BACKUP_VERIFY_DOWNLOAD_RETRIES=${BACKUP_VERIFY_DOWNLOAD_RETRIES:-2}
+      - BACKUP_MIN_DISK_MB=${BACKUP_MIN_DISK_MB:-100}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - db-data:/app/data
       - ./secrets:/app/secrets:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   nginx:
     build:
@@ -27,7 +37,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
