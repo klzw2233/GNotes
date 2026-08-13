@@ -55,18 +55,25 @@ async def update_verify(
     await db.commit()
 
 
-async def list_recent(db: aiosqlite.Connection, limit: int = 20) -> list[dict]:
-    """最近 N 条备份记录（按开始时间倒序）。"""
+async def list_recent(db: aiosqlite.Connection, limit: int = 20, offset: int = 0) -> list[dict]:
+    """最近 N 条备份记录（按开始时间倒序），支持分页。"""
     cur = await db.execute(
         """SELECT id, status, filename, size_bytes, drive_file_id, error_message,
                   verify_status, verify_message, started_at, finished_at
            FROM backup_runs
            ORDER BY started_at DESC
-           LIMIT ?""",
-        (limit,),
+           LIMIT ? OFFSET ?""",
+        (limit, offset),
     )
     rows = await cur.fetchall()
     return [dict(r) for r in rows]
+
+
+async def count_all(db: aiosqlite.Connection) -> int:
+    """backup_runs 总记录数（供分页总数）。"""
+    cur = await db.execute("SELECT COUNT(*) FROM backup_runs")
+    row = await cur.fetchone()
+    return row[0] if row else 0
 
 
 async def get_latest(db: aiosqlite.Connection, status: str | None = None) -> dict | None:

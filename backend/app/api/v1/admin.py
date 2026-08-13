@@ -1,14 +1,14 @@
-"""管理员路由：/admin/users（建用户）、/admin/backup（手动备份）。"""
+"""管理员路由：/admin/users（建用户）、/admin/backup（手动备份）、/admin/backup/runs（历史）。"""
 from __future__ import annotations
 
 import logging
 
 import aiosqlite
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import get_db_dep, require_admin
 from app.core.security import hash_password
-from app.repositories import user_repo
+from app.repositories import backup_run_repo, user_repo
 from app.schemas.auth import UserCreate
 from app.schemas.common import ok
 from app.services.backup_service import get_backup_status, run_backup
@@ -53,7 +53,37 @@ async def trigger_backup(_admin: dict = Depends(require_admin)) -> dict:
     return ok(result, message="备份完成")
 
 
+def _next_run_at(request: Request) -> str | None:
+    """从 app.state.scheduler 取下一次定时备份时间（lifespan 未触发时为 None）。"""
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        return None
+    job = scheduler.get_job("daily_backup")
+    if job is None or job.next_run_time is None:
+        return None
+    return job.next_run_time.isoformat()
+
+
 @router.get("/backup")
-async def backup_status(_admin: dict = Depends(require_admin)) -> dict:
-    """查询备份配置是否齐全，以及最近一次备份结果（查 backup_runs 表）。"""
-    return ok(await get_backup_status())
+async def backup_status(
+    request: Request,
+    _admin: dict = Depends(require_admin),
+) -> dict:
+    """查询备份配置是否齐全、最近一次备份结果、连续失败次数、下次定时备份时间。"""
+    status_data = await get_backup_status()
+    status_data["next_run_at"] = _next_run_at(request)
+    return ok(status_data)
+
+
+@router.get("/backup/runs")
+async def backup_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    _admin: dict = Depends(require_admin),
+    db: aiosqlite.Connection = Depends(get_db_dep),
+) -> dict:
+    """分页查询备份历史（backup_runs 表）。"""
+    offset = (page - 1) * page_size
+    items = await backup_run_repo.list_recent(db, limit=page_size, offset=offset)
+    total = await backup_run_repo.count_all(db)
+    return ok({"items": items, "total": total, "page": page, "page_size": page_size})
