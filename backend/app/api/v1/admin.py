@@ -55,5 +55,5 @@ async def trigger_backup(_admin: dict = Depends(require_admin)) -> dict:
 
 @router.get("/backup")
 async def backup_status(_admin: dict = Depends(require_admin)) -> dict:
-    """查询备份配置是否齐全，以及最近一次备份结果。"""
-    return ok(get_backup_status())
+    """查询备份配置是否齐全，以及最近一次备份结果（查 backup_runs 表）。"""
+    return ok(await get_backup_status())

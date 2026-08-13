@@ -182,18 +182,17 @@ async def test_retention_deletes_oldest(initialized_db: None) -> None:
 
 @pytest.mark.asyncio
 async def test_run_backup_without_drive_records_failure(initialized_db: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    """未配置 Drive 时 run_backup 抛错并写入状态，调用方捕获后进程应继续。"""
+    """未配置 Drive 时 run_backup 抛错并写入 backup_runs，调用方捕获后进程应继续。"""
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "")
     from app.core import config as config_mod
     config_mod.get_settings.cache_clear()
 
     from app.services import backup_service
-    backup_service._last_status["ok"] = None
-
     with pytest.raises(RuntimeError):
         await backup_service.run_backup()
 
-    status = backup_service.get_backup_status()
+    status = await backup_service.get_backup_status()
     assert status["ok"] is False
     assert status["configured"] is False
     assert "Google Drive" in status["message"]
+    assert status["consecutive_failures"] == 1

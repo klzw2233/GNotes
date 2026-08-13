@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     google_drive_folder_id: str = ""
     backup_schedule: str = "0 2 * * *"
     backup_retention_count: int = 30
+    # P0-3/P0-4/P0-5 备份可靠性参数
+    backup_retry_attempts: int = 3
+    backup_verify_enabled: bool = True  # 备份成功后自动跑恢复验证
+    backup_verify_download_retries: int = 2  # 手动验证下载重试（历史备份）
+    backup_min_disk_mb: int = 100  # 临时目录最低可用空间（MB）
 
     # --- 其他 ---
     log_level: str = "INFO"
