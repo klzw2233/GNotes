@@ -143,3 +143,31 @@ async def test_logout_with_token(client: AsyncClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["code"] == 0
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limited(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """同一 IP 连续失败达到上限后返回 429。"""
+    monkeypatch.setenv("LOGIN_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("LOGIN_WINDOW_SECONDS", "300")
+    from app.core import config as config_mod
+    config_mod.get_settings.cache_clear()
+
+    for _ in range(3):
+        r = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "wrong"},
+        )
+        assert r.status_code == 401
+
+    blocked = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "wrong"},
+    )
+    assert blocked.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_docs_disabled_by_default(client: AsyncClient) -> None:
+    resp = await client.get("/docs")
+    assert resp.status_code == 404

@@ -70,7 +70,15 @@ async def lifespan(app: FastAPI):
     logger.info("GNotes 后端关闭")
 
 
-app = FastAPI(title="GNotes", version="0.1.0", lifespan=lifespan)
+_settings = get_settings()
+app = FastAPI(
+    title="GNotes",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _settings.debug else None,
+    redoc_url="/redoc" if _settings.debug else None,
+    openapi_url="/openapi.json" if _settings.debug else None,
+)
 
 
 # 路由挂载（阶段2先挂 auth，阶段3+4+5 逐步追加）

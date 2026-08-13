@@ -46,6 +46,9 @@ class Settings(BaseSettings):
 
     # --- 其他 ---
     log_level: str = "INFO"
+    debug: bool = False  # True 时开放 /docs；生产保持 False
+    login_max_attempts: int = 10
+    login_window_seconds: int = 300
 
     @property
     def encryption_key_bytes(self) -> bytes:

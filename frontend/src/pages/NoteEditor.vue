@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getNote, createNote, updateNote } from '../services/notes'
 
@@ -52,7 +52,19 @@ async function onSave(): Promise<void> {
   }
 }
 
-onMounted(load)
+watch(
+  () => [noteId.value, viewMode.value] as const,
+  () => {
+    if (!noteId.value) {
+      title.value = ''
+      content.value = ''
+      error.value = ''
+      return
+    }
+    void load()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

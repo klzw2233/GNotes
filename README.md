@@ -126,10 +126,10 @@ print('已还原为 restored.db')
 ```bash
 # 后端
 cd backend
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 export JWT_SECRET=... ENCRYPTION_KEY=... INITIAL_ADMIN_PASSWORD=... INITIAL_ADMIN_EMAIL=... DATABASE_PATH=./notes.db
 pytest            # 运行测试
-uvicorn app.main:app --reload   # 本地运行
+uvicorn app.main:app --reload   # 本地运行（需要 DEBUG=true 才开放 /docs）
 
 # 前端
 cd frontend
@@ -147,3 +147,5 @@ npm run build     # 生产构建
 - 前端全程禁用 `v-html`，nginx 配置 CSP 头
 - JWT 7 天过期，密码 bcrypt 哈希（最长 72 字符）
 - `JWT_SECRET` 启动时校验至少 32 字符，不够则 fail-fast
+- 生产默认关闭 `/docs` `/redoc` `/openapi.json`（`DEBUG=true` 才开放）
+- 登录按 IP 限流（后端进程内 + nginx `limit_req`）
