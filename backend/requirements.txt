@@ -9,3 +9,4 @@ cryptography>=44.0
 apscheduler>=3.10
 google-api-python-client>=2.154
 google-auth>=2.36
+tenacity>=8.5

@@ -151,15 +151,24 @@ def _do_backup_sync() -> dict:
 
 
 def _apply_retention(client: GDriveClient, retention_count: int) -> None:
-    """删除超出保留数量的最旧备份文件。"""
+    """删除超出保留数量的最旧备份文件。
+
+    P0-2：双重防护。list_backup_files 已按 `name contains 'backup_'` 过滤，
+    这里对每个待删文件再校验 startswith('backup_') and endswith('.db.gz.enc')，
+    两者都满足才删；否则跳过并记 warning（绝不删看起来不像 GNotes 备份的文件）。
+    """
     try:
         files = client.list_backup_files()
         if len(files) <= retention_count:
             return
         to_delete = files[: len(files) - retention_count]
         for f in to_delete:
-            client.delete_file(f["id"])
-            logger.info("已删除过期备份: %s", f["name"])
+            name = f.get("name", "")
+            if name.startswith("backup_") and name.endswith(".db.gz.enc"):
+                client.delete_file(f["id"])
+                logger.info("已删除过期备份: %s", name)
+            else:
+                logger.warning("保留策略跳过非 GNotes 备份文件: %s (id=%s)", name, f.get("id"))
     except Exception:
         logger.exception("保留策略执行失败（不影响本次备份）")
 
