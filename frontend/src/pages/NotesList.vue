@@ -110,6 +110,8 @@ onMounted(() => {
       <h1 class="page-title">我的笔记</h1>
       <span class="spacer" />
       <span class="muted">{{ auth.username || '已登录' }}</span>
+      <button v-if="auth.isAdmin" @click="router.push({ name: 'admin' })">管理</button>
+      <button @click="router.push({ name: 'settings' })">设置</button>
       <button @click="auth.logout().then(() => router.push({ name: 'login' }))">登出</button>
       <button class="primary" @click="router.push({ name: 'new' })">新建</button>
     </div>

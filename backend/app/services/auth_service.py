@@ -13,12 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 async def login(db: aiosqlite.Connection, username: str, password: str) -> tuple[str, str] | None:
-    """登录成功返回 (JWT, role)，失败返回 None。"""
+    """登录成功返回 (JWT, role)，失败返回 None。
+
+    被禁用用户返回 None（与密码错误同样 401，不暴露「账户存在但被禁用」）。
+    """
     user = await user_repo.get_user_by_username(db, username)
     if not user:
         return None
+    if user.get("is_disabled"):
+        return None  # 禁用账户：登录失败（与凭据错误同样处理，避免信息泄露）
     if not verify_password(password, user["password_hash"]):
         return None
+    await user_repo.update_last_login(db, user["id"])
     return create_access_token(user["id"], user["role"]), user["role"]
 
 
