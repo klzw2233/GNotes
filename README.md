@@ -37,7 +37,7 @@ GNotes/
 ├── nginx/
 ├── docker-compose.yml
 ├── .env.example
-├── 部署文档.md              # Ubuntu / 虚拟机逐步部署
+├── Deployment.md              # Ubuntu / 虚拟机逐步部署
 └── README.md
 ```
 
@@ -45,7 +45,7 @@ GNotes/
 
 ## 部署（精简）
 
-完整步骤、虚拟机注意点和排错见 **[部署文档.md](./部署文档.md)**。
+完整步骤、虚拟机注意点和排错见 **[Deployment.md](./Deployment.md)**。
 
 ```bash
 cp .env.example .env
@@ -126,7 +126,7 @@ curl -s -X POST http://localhost/api/v1/admin/users \
 
 链路：`VACUUM INTO` 一致性快照 → gzip → AES-256-GCM 整包加密 → 上传。Drive 上文件名为 `backup_<UTC时间>.db.gz.enc`。
 
-配置步骤见 [部署文档.md](./部署文档.md) 第 6 节。需要：`secrets/gdrive.json`、把 Drive 文件夹分享给服务账号、`.env` 里的 `GOOGLE_DRIVE_FOLDER_ID`。
+配置步骤见 [Deployment.md](./Deployment.md) 第 6 节。需要：`secrets/gdrive.json`、把 Drive 文件夹分享给服务账号、`.env` 里的 `GOOGLE_DRIVE_FOLDER_ID`。
 
 定时默认 `BACKUP_SCHEDULE=0 2 * * *`（UTC）。保留份数 `BACKUP_RETENTION_COUNT`（默认 30）。
 
