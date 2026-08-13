@@ -108,8 +108,8 @@ async def test_login_wrong_password(client: AsyncClient) -> None:
         "/api/v1/auth/login",
         json={"username": "admin", "password": "wrong"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["code"] == 401
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "用户名或密码错误"
 
 
 @pytest.mark.asyncio
@@ -118,7 +118,8 @@ async def test_login_unknown_user(client: AsyncClient) -> None:
         "/api/v1/auth/login",
         json={"username": "nobody", "password": "whatever"},
     )
-    assert resp.json()["code"] == 401
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "用户名或密码错误"
 
 
 @pytest.mark.asyncio

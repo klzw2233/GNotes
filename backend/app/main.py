@@ -24,6 +24,15 @@ from app.services.backup_service import run_backup
 logger = logging.getLogger(__name__)
 
 
+async def _scheduled_backup() -> None:
+    """定时备份包装：失败只记日志，不让异常冒出调度器。"""
+    try:
+        result = await run_backup()
+        logger.info("定时备份完成: %s", result.get("filename"))
+    except Exception:
+        logger.exception("定时备份失败")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -45,7 +54,7 @@ async def lifespan(app: FastAPI):
     # 4. APScheduler 定时备份
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        run_backup,
+        _scheduled_backup,
         CronTrigger.from_crontab(settings.backup_schedule),
         id="daily_backup",
         max_instances=1,

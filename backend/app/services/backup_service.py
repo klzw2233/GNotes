@@ -28,9 +28,10 @@ def _timestamp() -> str:
 
 def _vacuum_into(source_db: str, dest_path: Path) -> None:
     """用 VACUUM INTO 生成一致性二进制快照（只读事务，不阻塞 WAL 写入）。"""
+    dest = dest_path.resolve().as_posix().replace("'", "''")
     conn = sqlite3.connect(source_db)
     try:
-        conn.execute(f"VACUUM INTO '{dest_path}'")
+        conn.execute(f"VACUUM INTO '{dest}'")
     finally:
         conn.close()
 

@@ -19,7 +19,7 @@ class UserCreate(BaseModel):
     """管理员创建用户入参。"""
     username: str = Field(min_length=1, max_length=64)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=6, max_length=72)  # bcrypt 只吃前 72 字节
 
 
 class UserOut(BaseModel):

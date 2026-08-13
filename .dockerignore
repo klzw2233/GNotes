@@ -1,0 +1,14 @@
+.git
+.github
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/.venv
+**/node_modules
+frontend/dist
+backend
+.env
+secrets
+certs
+*.md
+需求文档.md

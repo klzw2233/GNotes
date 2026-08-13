@@ -55,6 +55,10 @@ docker compose up -d --build
 
 首次启动会自动用 `.env` 里的凭据创建初始管理员。
 
+本 compose 只暴露 **HTTP :80**。公网部署请在前面加一层 TLS 终结（Cloudflare / Caddy / 主机 nginx），不要把未加密的 80 端口直接对公网。backend 容器的 8000 端口不映射到宿主机，只允许 nginx 反代访问。
+
+**不要给 uvicorn 开多 worker**（`--workers N`）。定时备份跑在 FastAPI 进程内，多 worker 会启动多个调度器、备份跑两遍。
+
 ## API 示例
 
 ```bash
@@ -139,6 +143,7 @@ npm run build     # 生产构建
 - 笔记内容服务端 AES-256-GCM 加密，密钥走环境变量、不落盘
 - 数据库仅存密文，标题/正文各有独立 nonce（绝不复用）
 - 备份包双层加密（数据库内密文 + 整体再加密）
-- 全站 HTTPS（nginx 终结 TLS，部署时配置证书）
+- 公网请在 nginx 前面终结 TLS（本 compose 只提供 HTTP :80）
 - 前端全程禁用 `v-html`，nginx 配置 CSP 头
-- JWT 7 天过期，密码 bcrypt 哈希
+- JWT 7 天过期，密码 bcrypt 哈希（最长 72 字符）
+- `JWT_SECRET` 启动时校验至少 32 字符，不够则 fail-fast

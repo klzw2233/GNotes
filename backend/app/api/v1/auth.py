@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import aiosqlite
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user, get_db_dep
 from app.core.security import TOKEN_TTL_DAYS
@@ -21,7 +21,7 @@ async def login(
     """用户名+密码 → JWT。"""
     token = await do_login(db, body.username, body.password)
     if not token:
-        return {"code": 401, "message": "用户名或密码错误", "data": None}
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户名或密码错误")
     return ok(
         TokenResponse(
             token=token, token_type="bearer", expires_in=TOKEN_TTL_DAYS * 86400

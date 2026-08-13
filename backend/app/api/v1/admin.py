@@ -1,6 +1,8 @@
 """管理员路由：/admin/users（建用户）、/admin/backup（手动备份）。"""
 from __future__ import annotations
 
+import logging
+
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -10,6 +12,8 @@ from app.repositories import user_repo
 from app.schemas.auth import UserCreate
 from app.schemas.common import ok
 from app.services.backup_service import run_backup
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -43,8 +47,7 @@ async def trigger_backup(_admin: dict = Depends(require_admin)) -> dict:
     """手动触发备份：快照→gzip→加密→上传 Google Drive。同步返回结果。"""
     try:
         result = await run_backup()
-    except Exception as e:
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, f"备份失败: {e}"
-        )
+    except Exception:
+        logger.exception("手动备份失败")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "备份失败")
     return ok(result, message="备份完成")

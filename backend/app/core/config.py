@@ -5,9 +5,12 @@ import base64
 import logging
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+MIN_JWT_SECRET_LEN = 32
 
 
 class Settings(BaseSettings):
@@ -17,6 +20,15 @@ class Settings(BaseSettings):
     jwt_secret: str
     encryption_key: str  # Base64(32 bytes)
     backup_encryption_key: str | None = None  # 缺省回退 encryption_key
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def jwt_secret_must_be_long_enough(cls, v: str) -> str:
+        if len(v) < MIN_JWT_SECRET_LEN:
+            raise ValueError(
+                f"JWT_SECRET 至少 {MIN_JWT_SECRET_LEN} 字符，实际 {len(v)}"
+            )
+        return v
 
     # --- 初始管理员 ---
     initial_admin_username: str = "admin"
