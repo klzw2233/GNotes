@@ -20,6 +20,8 @@ _USER_COLUMN_MIGRATIONS = [
     ("is_disabled", "ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0"),
     ("last_login_at", "ALTER TABLE users ADD COLUMN last_login_at TEXT"),
     ("deleted_at", "ALTER TABLE users ADD COLUMN deleted_at TEXT"),
+    # P1-8：token 版本号，改密/重置密码时 +1，使旧 JWT 立即失效
+    ("token_version", "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
